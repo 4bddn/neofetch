@@ -4724,8 +4724,8 @@ set_text_colors() {
 
 color() {
     case $1 in
-        [0-6])    printf '%b\e[3%sm'   "$reset" "$1" ;;
-        7 | "fg") printf '\e[37m%b'    "$reset" ;;
+        [0-6])    printf '%s\e[3%sm'   "$reset" "$1" ;;
+        7 | "fg") printf '\e[37m%s'    "$reset" ;;
         *)        printf '\e[38;5;%bm' "$1" ;;
     esac
 }
