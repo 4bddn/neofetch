@@ -4012,11 +4012,12 @@ cursor() {
 # IMAGES
 
 image_backend() {
-    [[ "$image_backend" != "off" ]] && ! type -p convert &>/dev/null && \
+    [[ "$image_backend" != @("off"|"video") ]] && ! type -p convert &>/dev/null && \
         { image_backend="ascii"; err "Image: Imagemagick not found, falling back to ascii mode."; }
 
     case ${image_backend:-off} in
         "ascii") print_ascii ;;
+        "video") print_video ;;
         "off") image_backend="off" ;;
 
         "caca" | "catimg" | "chafa" | "jp2a" | "iterm2" | "termpix" |\
@@ -4048,7 +4049,7 @@ image_backend() {
             err "Image: Unknown image backend specified '$image_backend'."
             err "Image: Valid backends are: 'ascii', 'caca', 'catimg', 'chafa', 'jp2a', 'iterm2',
                                             'kitty', 'off', 'sixel', 'pot', 'pixterm', 'termpix',
-                                            'tycat', 'w3m', 'viu')"
+                                            'tycat', 'w3m', 'video', 'viu')"
             err "Image: Falling back to ascii mode."
             print_ascii
         ;;
@@ -4087,6 +4088,28 @@ print_ascii() {
         return
     }
 
+    print_data
+    LC_ALL=C
+}
+
+print_video() {
+    if [[ -z $vid_height ]]; then
+        exec {vid_fd}< "$image_source"
+        read -u $vid_fd -r vid_height vid_width
+        lines=$vid_height
+        ascii_len=$vid_width
+    fi
+    ascii_data=$(head -n $vid_height <&$vid_fd)
+    if [[ -z $ascii_data ]]; then
+        vid_done=true
+    else
+        LC_ALL="$sys_locale"
+        print_data
+        LC_ALL=C
+    fi
+}
+
+print_data() {
     # Colors.
     ascii_data="${ascii_data//\$\{c1\}/$c1}"
     ascii_data="${ascii_data//\$\{c2\}/$c2}"
@@ -4095,11 +4118,8 @@ print_ascii() {
     ascii_data="${ascii_data//\$\{c5\}/$c5}"
     ascii_data="${ascii_data//\$\{c6\}/$c6}"
 
-    vid_height=${vid_height-$lines} #REMOVE
-
     ((text_padding=ascii_len+gap))
     printf '%b\n' "$ascii_data${reset}"
-    LC_ALL=C
 }
 
 get_image_source() {
@@ -5365,7 +5385,7 @@ get_args() {
             "--source") image_source="$2" ;;
             "--ascii" | "--caca" | "--catimg" | "--chafa" | "--jp2a" | "--iterm2" | "--off" |\
             "--pot" | "--pixterm" | "--sixel" | "--termpix" | "--tycat" | "--w3m" | "--kitty" |\
-            "--ueberzug" | "--viu")
+            "--ueberzug" | "--video" | "--viu")
                 image_backend="${1/--}"
                 case $2 in
                     "-"* | "") ;;
@@ -11545,9 +11565,10 @@ EOF
     }
 }
 
-cleanup() {
+vid_cleanup() {
+    exec {vid_fd}<&-
     stty echo
-    cursor "$skip" 'B'
+    cursor $skip 'B'
     exit 0
 }
 
@@ -11598,17 +11619,20 @@ main() {
         sleep 1
     done
 
-    stty -echo
-    skip=$((info_height - vid_height))
-    skip=$(((skip > 0 ? skip : 0) + 1))
-    cursor "$skip" 'A'
-    trap cleanup SIGINT
-    while true; do
-        cursor "${vid_height}" 'A'
-        print_ascii
-        sleep 1
-    done
-    cleanup
+    if [[ $image_backend == "video" ]]; then
+        stty -echo
+        skip=$((info_height - vid_height))
+        skip=$(((skip > 0 ? skip : 0) + 1))
+        cursor $skip 'A'
+        trap vid_cleanup SIGINT
+        while [[ -z $vid_done ]]; do
+            sleep 1
+            cursor $vid_height 'A'
+            print_video
+        done
+        cursor $vid_height 'B'
+        vid_cleanup
+    fi
 
     return 0
 }
