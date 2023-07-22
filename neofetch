@@ -4005,6 +4005,10 @@ get_cols() {
     prin=1
 }
 
+cursor() {
+    printf '\e[%s%c\e[9999999D' "$1" "$2"
+}
+
 # IMAGES
 
 image_backend() {
@@ -4051,7 +4055,7 @@ image_backend() {
     esac
 
     # Set cursor position next image/ascii.
-    [[ "$image_backend" != "off" ]] && printf '\e[%sA\e[9999999D' "${lines:-0}"
+    [[ "$image_backend" != "off" ]] && cursor "${lines:-0}" 'A'
 }
 
 print_ascii() {
@@ -4090,6 +4094,8 @@ print_ascii() {
     ascii_data="${ascii_data//\$\{c4\}/$c4}"
     ascii_data="${ascii_data//\$\{c5\}/$c5}"
     ascii_data="${ascii_data//\$\{c6\}/$c6}"
+
+    vid_height=${vid_height-$lines} #REMOVE
 
     ((text_padding=ascii_len+gap))
     printf '%b\n' "$ascii_data${reset}"
@@ -4547,7 +4553,7 @@ to_ascii() {
     print_ascii
 
     # Set cursor position next image/ascii.
-    printf '\e[%sA\e[9999999D' "${lines:-0}"
+    cursor "${lines:-0}" 'A'
 }
 
 to_off() {
@@ -11539,6 +11545,12 @@ EOF
     }
 }
 
+cleanup() {
+    stty echo
+    cursor "$skip" 'B'
+    exit 0
+}
+
 main() {
     cache_uname
     get_os
@@ -11585,6 +11597,18 @@ main() {
         display_image
         sleep 1
     done
+
+    stty -echo
+    skip=$((info_height - vid_height))
+    skip=$(((skip > 0 ? skip : 0) + 1))
+    cursor "$skip" 'A'
+    trap cleanup SIGINT
+    while true; do
+        cursor "${vid_height}" 'A'
+        print_ascii
+        sleep 1
+    done
+    cleanup
 
     return 0
 }
