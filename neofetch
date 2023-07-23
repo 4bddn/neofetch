@@ -4095,9 +4095,10 @@ print_ascii() {
 print_video() {
     if [[ -z $vid_height ]]; then
         exec {vid_fd}< "$image_source"
-        read -u $vid_fd -r vid_height vid_width
+        read -u $vid_fd -r vid_height vid_width vid_fps
         lines=$vid_height
         ascii_len=$vid_width
+        rate=$(awk 'BEGIN {print int(1e9/'$vid_fps')}')
     fi
     ascii_data=$(head -n $vid_height <&$vid_fd)
     if [[ -z $ascii_data ]]; then
@@ -11568,7 +11569,7 @@ EOF
 vid_cleanup() {
     exec {vid_fd}<&-
     stty echo
-    cursor $skip 'B'
+    cursor $((vid_height + skip)) 'B'
     exit 0
 }
 
@@ -11597,6 +11598,10 @@ main() {
     }
 
     image_backend
+    if [[ $image_backend == "video" ]]; then
+        time=$(date +%s%N)
+    fi
+
     get_cache_dir
     old_functions
     print_info
@@ -11626,11 +11631,12 @@ main() {
         cursor $skip 'A'
         trap vid_cleanup SIGINT
         while [[ -z $vid_done ]]; do
-            sleep 1
             cursor $vid_height 'A'
+            now=$(( $(date +%s%N) - time))
+            sleep $(awk 'BEGIN {print '$((rate - now))'/1e9}')
             print_video
+            ((time+=rate))
         done
-        cursor $vid_height 'B'
         vid_cleanup
     fi
 
